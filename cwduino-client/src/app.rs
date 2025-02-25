@@ -6,15 +6,9 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
     DefaultTerminal, Frame,
 };
-use std::{
-    io::Result,
-    process::{Child, Command},
-    sync::mpsc::Receiver,
-    thread::JoinHandle,
-    time::Duration,
-};
+use std::{io::Result, process::Child, sync::mpsc::Receiver, thread::JoinHandle, time::Duration};
 
-use crate::imp::begin_serial;
+use crate::{imp::begin_serial, profile::Profile, AppArgs};
 
 pub(crate) enum Event {
     LeftPress,
@@ -25,11 +19,12 @@ pub(crate) enum Event {
     Disconnected,
 }
 
-pub(crate) struct App {
+pub(crate) struct App<'a> {
     pub left_paddle: bool,
     pub right_paddle: bool,
     pub connected: bool,
     pub options: AppOptions,
+    profile: Profile<'a>,
     dit_child: Option<Child>,
     dah_child: Option<Child>,
 }
@@ -44,20 +39,7 @@ pub(crate) enum Side {
     Right,
 }
 
-impl Default for App {
-    fn default() -> Self {
-        Self {
-            left_paddle: false,
-            right_paddle: false,
-            connected: true,
-            options: Default::default(),
-            dit_child: None,
-            dah_child: None,
-        }
-    }
-}
-
-impl App {
+impl<'a> App<'a> {
     fn press_left(&mut self) {
         self.left_paddle = true;
         if self.options.dit_side == Side::Left {
@@ -98,7 +80,7 @@ impl App {
             return;
         }
 
-        self.dit_child = Command::new("bash").arg("dit.sh").spawn().ok();
+        self.dit_child = self.profile.dit_child_command().spawn().ok();
     }
 
     fn start_dah(&mut self) {
@@ -106,7 +88,7 @@ impl App {
             return;
         }
 
-        self.dah_child = Command::new("bash").arg("dah.sh").spawn().ok();
+        self.dah_child = self.profile.dah_child_command().spawn().ok();
     }
 
     fn reset(&mut self) {
@@ -128,6 +110,18 @@ impl App {
             None => {}
         }
     }
+
+    fn new(args: &'a AppArgs) -> std::result::Result<Self, String> {
+        Ok(Self {
+            left_paddle: false,
+            right_paddle: false,
+            connected: true,
+            options: Default::default(),
+            profile: Profile::load(&args.profile)?,
+            dit_child: None,
+            dah_child: None,
+        })
+    }
 }
 
 impl Default for AppOptions {
@@ -139,12 +133,12 @@ impl Default for AppOptions {
 }
 const COLOR: Color = Color::from_u32(0xFF00CC00);
 
-pub fn start_tui(mut term: DefaultTerminal) -> Result<()> {
-    let Some((handle, rx)) = begin_serial() else {
+pub fn start_tui(mut term: DefaultTerminal, args: AppArgs) -> Result<()> {
+    let Some((handle, rx)) = begin_serial(&args) else {
         return Ok(());
     };
 
-    let mut app = Default::default();
+    let mut app = App::new(&args).unwrap();
 
     loop {
         update_app(&rx, &handle, &mut app);

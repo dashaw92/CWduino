@@ -5,15 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::app::Event;
-pub(crate) fn begin_serial() -> Option<(JoinHandle<()>, Receiver<Event>)> {
-    let Some(port) = std::env::args_os().skip(1).next() else {
-        eprintln!("Expected a serial port path as the first argument.");
-        return None;
-    };
-
-    let Ok(mut serial) = serial::open(&port) else {
-        eprintln!("Failed to open serial port {port:?}.");
+use crate::{app::Event, AppArgs};
+pub(crate) fn begin_serial(args: &AppArgs) -> Option<(JoinHandle<()>, Receiver<Event>)> {
+    let Ok(mut serial) = serial::open(&args.device) else {
+        eprintln!("Failed to open serial port {}.", &args.device);
         return None;
     };
 
